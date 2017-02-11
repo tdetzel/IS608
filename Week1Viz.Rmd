@@ -1,0 +1,165 @@
+---
+title: 'DATA 608: Week 1 Visualizations'
+author: "Tom Detzel, Feb. 10, 2017"
+output:
+  html_document:
+    theme: lumen
+    toc: yes
+---
+
+```{r setup, eval=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+  pdf_document:
+    toc: yes
+```
+*** 
+### Introduction  
+This first exercise offers a taste of the plotting arsenal in ggplot2, which combined with the dplyr data manipulation tools allow a lot of flexibility for creating vizualizations. We tried incorporating plotly but couldn't get it to work. We'll take that up in a subsequent exercise. For now, we are visualizing company revenue and employment data in the sections that follow.  
+
+***
+### Prepare R Environment
+This setup is included so others can replicate the results.
+
+```{r, eval=TRUE, warning=FALSE, message=FALSE}
+
+# install.packages(c("shiny", "htmlwidgets"))
+
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(plotly)
+
+```
+
+***
+### Get the data
+First step is to download the data and put it in a dataframe. Because revenues per employee will be used in a subsequent plot, we create a new variable while we're at it.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+
+file = "https://raw.githubusercontent.com/charleyferrari/CUNY_DATA608/master/lecture1/Data/inc5000_data.csv"
+
+download.file(file, destfile = "companies.csv", method = "curl")
+
+companies <- read.csv('companies.csv', header=T)
+
+# str(companies)
+
+# get rid of bad observations
+companies <- na.omit(companies)
+
+# create a variable measuring revenue per employee
+companies$Rev_Emp <- round(companies$Revenue/companies$Employees, 2)
+
+# summary(companies)
+# save.image("Week1Viz.RData")
+
+```
+
+***  
+### Plot States With Most Top Companies  
+The code uses dplyr to group the employment data by state and count the number of companies. The plot uses the ggthemes solarized_2 theme with an adjustment to make the title flush left over the bars.  
+  
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, fig.height=8, fig.width=10}
+
+companies2 <- ungroup(companies)%>%
+                group_by(State) %>%
+                summarize(Count = n()) %>%
+                arrange(desc(Count))
+
+# build the plot
+p <- ggplot(companies2, aes(x = reorder(State, Count), y = Count, -value)) +
+      geom_bar(stat = 'identity') +
+      coord_flip() +
+      labs(title = "Top Companies by State", x = "", y = "") +
+      theme_solarized_2()
+
+# plot plus adjustment for title location
+p + theme(
+    plot.title = element_text(
+      hjust = 0.065,
+      size = rel(1.5)
+    ))
+
+```
+
+*** 
+### Analyze Third-Ranked State: New York  
+The code uses dplyr to filter out industry data for New York state, calculate an average employment for each industry, identify outlier industries using the boxplot.stats() function, exclude those industries and then plot the data. Excluding outliers, Software and IT Services have the highest mean employment.
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, fig.height=4, fig.width=8}
+
+## first get the ny companies
+ny <- ungroup(companies) %>%
+        filter(State=='NY') %>%
+        group_by(Industry) %>%
+        summarise(Count = n(), Average = round(mean(Employees),2)) %>%
+        arrange(desc(Average))
+
+## Determine what industries are outliers
+outliers <- boxplot.stats(ny$Average)$out
+
+## exclude the outliers
+ny2 <- ungroup(ny) %>% 
+         filter(!Average%in%outliers) %>%
+         select(Industry, Count, Average) %>%
+         arrange(Industry)
+
+## plot the remaining industries
+ggplot(ny2, aes(x = Industry, y = Average)) + 
+  geom_point() +
+  coord_flip() +
+  labs(x='', y='',
+       title = "New York: Average Employment by Industry",
+       subtitle = "in thousands") +
+  theme_fivethirtyeight() + 
+  theme(
+       plot.title = element_text(
+       hjust = 0.0,
+       ))
+
+```
+
+***
+### Chart Revenue per Employee
+Similar to our earlier plot, this code groups revenues per employee by Industry and plots the result. Note that the y-axis formatting is in dollars, another adjustment to the base solarized_2 ggtheme. Engergy has very high revenues per employee because a few firms are traders who make a killing.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, fig.height=5, fig.width=8}
+
+revenue <- ungroup(companies) %>%
+              group_by(Industry) %>%
+              summarise(Count = n(), Revenues = round(mean(Rev_Emp), 2))
+
+# build the plot
+p3 <- ggplot(revenue, aes(x = reorder(Industry, Revenues), y = Revenues, -value)) +
+      geom_bar(stat = 'identity') +
+      coord_flip() +
+      labs(title = "Revenues per Employee", x = "", y = "") +
+      scale_y_continuous(labels=dollar) +
+      theme_solarized_2()
+
+# plot plus adjustment for title location
+p3 + theme(
+    plot.title = element_text(
+      hjust = 0.075,
+      size = rel(1.25)
+    ))
+
+```
+
+
+```{r, eval=FALSE, echo=FALSE}
+
+library(plotly)
+
+Sys.setenv("plotly_username"="tdetz")
+Sys.setenv("plotly_api_key"="6mEIzj8kqtFcNH5RxKpg")
+
+plotly(p)
+
+
+```
+
